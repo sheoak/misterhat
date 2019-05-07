@@ -35,8 +35,9 @@ class MisterhatModule:
             check = param['value'] < value
             other = self.high
 
-        if (check or ('lastcheck' in param and
-               (datetime.now() - self.alert_delta) < param['lastcheck'])):
+        if (check or (
+                'lastcheck' in param and
+                (datetime.now() - self.alert_delta) < param['lastcheck'])):
             return False
 
         param['lastcheck'] = datetime.now()
