@@ -26,10 +26,11 @@ class MisterhatServer:
         'LIST_MODULES': ('temp')  # list of installed modules
     }
 
-    def __init__(self, config={}):
+    def __init__(self, config=None):
 
         # merge our configuration
-        self.config = {**self.config, **config}
+        if (config is not None):
+            self.config = {**self.config, **config}
 
         self._init_sensehat()
         self._init_vocal()
