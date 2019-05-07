@@ -5,6 +5,7 @@ Main class for misterhat server.
 TODO: plugin system
 
 """
+import time
 
 import pyttsx3  # voice synthesis
 
@@ -15,16 +16,20 @@ class MisterhatServer:
     """Main class to run the server.
 
     """
-    list_modules = ('temp')
-    modules = {}
+    _modules = {}  # instances of modules
 
-    def __init__(self, conf):
+    config = {
+        'SILENT': False,  # do no use vocal synthesis if True
+        'ALERT_DELTA': 60,  # delay before triggering the same alert
+        'USE_EMULATOR': False,  # sense-hat emulator
+        'VOICE_SPEED': 100,  # voice synthesis speed in percent
+        'LIST_MODULES': ('temp')  # list of installed modules
+    }
 
-        # try:
-        self.conf = conf
-        self.list_modules = conf.LIST_MODULES
-        # except NoModuleConfigured:
-        # raise Exception('No module has been configured')
+    def __init__(self, config={}):
+
+        # merge our configuration
+        self.config = {**self.config, **config}
 
         self._init_sensehat()
         self._init_vocal()
@@ -35,10 +40,10 @@ class MisterhatServer:
         Initialize the modules objects
 
         """
-        for module in self.list_modules:
+        for module in self.config['LIST_MODULES']:
             modname = 'MisterhatModule' + module.title()
             modfunc = getattr(misterhat_module, modname)
-            self.modules[module] = modfunc(self.sense, self.engine)
+            self._modules[module] = modfunc(self)
 
     def _init_sensehat(self):
         """
@@ -47,7 +52,7 @@ class MisterhatServer:
         Note that this might be an emulator.
         """
 
-        if getattr(self.conf, 'USE_EMULATOR', False):
+        if self.config['USE_EMULATOR']:
             from sense_emu import SenseHat
         else:
             from sense_hat import SenseHat
@@ -61,14 +66,29 @@ class MisterhatServer:
 
         """
         # init voice synthesis
-        self.engine = pyttsx3.init()
-        self.engine.setProperty('rate', self.conf.VOICE_SPEED)
+        if not self.config['SILENT']:
+            self.voice = pyttsx3.init()
+            self.voice.setProperty('rate', self.config['VOICE_SPEED'])
+
+    def event(self, data):
+        """Called by the module when an event happens
+
+        """
+        self.sense.set_pixels(data['emoji'])
+
+        message = data['message'] % {'value': data['value']}
+        print(message)
+
+        if not self.config['SILENT']:
+            self.voice.say(message)
+            self.voice.runAndWait()
+
+        time.sleep(1)
 
     def run(self):
         """Run the observation of the sense-hat
 
         """
-
         while True:
-            for module in self.list_modules:
-                self.modules[module].analyze()
+            for module in self.config['LIST_MODULES']:
+                self._modules[module].analyze()

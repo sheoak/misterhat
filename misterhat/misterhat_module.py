@@ -1,27 +1,22 @@
 """misterhat_module.py.
 
 """
-import time
-import operator
 from datetime import datetime, timedelta
 
 from misterhat import emoji
 
 
 class MisterhatModule:
-
     """Abstract class for misterhat modules
 
     """
-
     low = {}
     high = {}
 
     # TODO: configuration
-    def __init__(self, sense, engine):
-        self.sense = sense
-        self.engine = engine
-        self.alert_delta = timedelta(seconds=600)
+    def __init__(self, server):
+        self.server = server
+        self.alert_delta = timedelta(seconds=server.config['ALERT_DELTA'])
 
     def compare(self, field, value):
         """Compare the value from the configuration with the current value
@@ -31,22 +26,22 @@ class MisterhatModule:
 
         """
 
-        # dynamic comparison
-        ope = operator.gt if field == 'high' else operator.lt
-        field_inv = 'low' if field == 'high' else 'high'
+        param = getattr(self, field)
 
-        conf = getattr(self, field)
+        if field == 'high':
+            check = param['value'] > value
+            other = self.low
+        else:
+            check = param['value'] < value
+            other = self.high
 
-        # we divide the condition for readability
-        if ope(conf['value'], value):
+        if (check or ('lastcheck' in param and
+               (datetime.now() - self.alert_delta) < param['lastcheck'])):
             return False
 
-        if ('lastcheck' in conf and
-                (datetime.now() - self.alert_delta) < conf['lastcheck']):
-            return False
+        param['lastcheck'] = datetime.now()
+        other['lastcheck'] = datetime(1970, 1, 1, 0, 0)
 
-        conf['lastcheck'] = datetime.now()
-        getattr(self, field_inv)['lastcheck'] = datetime(1970, 1, 1, 0, 0)
         return True
 
     def analyze(self):
@@ -60,10 +55,11 @@ class MisterhatModule:
         for field in ('low', 'high'):
             conf = getattr(self, field)
             if 'value' in conf and self.compare(field, value):
-                self.sense.set_pixels(conf['emoji'])
-                self.engine.say(conf['msg'] % {'value': value})
-                self.engine.runAndWait()
-                time.sleep(1)
+                self.server.event({
+                    'emoji': conf['emoji'],
+                    'message': conf['msg'],
+                    'value': value
+                })
 
     def value(self):
         """Must be implemented in the submodule
@@ -91,7 +87,7 @@ class MisterhatModuleHumidity(MisterhatModule):
         """Return the current humidity value on the sense-hat
 
         """
-        return self.sense.get_humidity()
+        return self.server.sense.get_humidity()
 
 
 class MisterhatModuleTemp(MisterhatModule):
@@ -113,7 +109,7 @@ class MisterhatModuleTemp(MisterhatModule):
         """Return the current temperature value on the sense-hat
 
         """
-        return self.sense.get_temperature()
+        return self.server.sense.get_temperature()
 
 
 class MisterhatModulePressure(MisterhatModule):
@@ -135,7 +131,7 @@ class MisterhatModulePressure(MisterhatModule):
         """Return the current pressure value on the sense-hat
 
         """
-        return self.sense.get_pressure()
+        return self.server.sense.get_pressure()
 
 
 class MisterhatModuleShake(MisterhatModule):
@@ -152,6 +148,6 @@ class MisterhatModuleShake(MisterhatModule):
         """Return the current shaking value on the sense-hat
 
         """
-        acceleration = self.sense.get_accelerometer_raw()
+        acceleration = self.server.sense.get_accelerometer_raw()
         return (abs(acceleration['x']) + abs(acceleration['y']) +
                 abs(acceleration['z']))
